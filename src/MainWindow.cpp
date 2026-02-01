@@ -7,10 +7,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   groupBox->setAlignment(Qt::AlignTop);
   auto *vbox = new QGridLayout;
   vbox->addWidget(combobox_programmer, 0, 0, Qt::AlignTop);
-  connect(combobox_programmer, SIGNAL (highlighted(int)), this, SLOT (check_for_programmer()));
-  vbox->addWidget(button_update, 0, 1);
+  vbox->addWidget(btn_check_programmer, 0, 1);
+  connect(btn_check_programmer, SIGNAL (released()), this, SLOT (check_for_programmer()));
+  vbox->addWidget(button_update, 0, 2);
   connect(button_update, SIGNAL (released()), this, SLOT (update_firmware()));
-  vbox->addWidget(combobox_device, 1, 0, 1, 0);
+  vbox->addWidget(combobox_device, 1, 0, 2, 0);
   connect(combobox_device, SIGNAL (currentTextChanged(QString)), this, SLOT (select_device(QString)));
   groupBox->setLayout(vbox);
   layout->addWidget(groupBox, 0, 0);
@@ -43,7 +44,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   vbox4->addWidget(device_memory, 1, 1);
   vbox4->addWidget(device_package_label, 2, 0);
   vbox4->addWidget(device_package, 2, 1);
-
   vbox4->addWidget(device_protocol_label, 0, 2);
   vbox4->addWidget(device_protocol, 0, 3);
   vbox4->addWidget(device_readbuffer_label, 1, 2);
@@ -63,12 +63,27 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   groupBox5->setLayout(vbox5);
   layout->addWidget(groupBox5, 2, 1);
 
+  auto *groupBox7 = new QGroupBox(tr("System Settings"));
+  auto *vbox7 = new QGridLayout;
+  vbox7->addWidget(system_sett_path_label, 1, 1);
+  vbox7->addWidget(system_sett_path, 1, 2);
+  vbox7->addWidget(button_select_path, 1, 3);
+  connect(button_select_path, SIGNAL (released()), this, SLOT (select_path_dialog()));
+  vbox7->addWidget(button_test_minipro_path, 1, 4);
+  connect(button_test_minipro_path, SIGNAL (released()), this, SLOT (check_for_minipro()));
+  vbox7->addWidget(output_path_label, 2, 1);
+  vbox7->addWidget(output_path, 2, 2);
+  vbox7->addWidget(button_select_output_path, 2, 3);
+  connect(button_select_output_path, SIGNAL (released()), this, SLOT (select_output_path_dialog()));
+  groupBox7->setLayout(vbox7);
+  layout->addWidget(groupBox7, 3, 0, 1, 0);
+
   auto *groupBox6 = new QGroupBox(tr("Output"));
   auto *vbox6 = new QVBoxLayout;
   vbox6->addWidget(status_view);
   vbox6->addStretch(1);
   groupBox6->setLayout(vbox6);
-  layout->addWidget(groupBox6, 3, 0, 1, 0);
+  layout->addWidget(groupBox6, 4, 0, 1, 0);
 
   status_view->setReadOnly(true);
 
@@ -100,6 +115,10 @@ void MainWindow::initializer() {
   button_write = new QPushButton("Write to Device");
   button_read = new QPushButton("Read from Device");
   button_update = new QPushButton("Update Firmware");
+  button_test_minipro_path = new QPushButton("Test minipro path");
+  button_select_path = new QPushButton("Select path (dialog)");
+  button_select_output_path = new QPushButton("Set output file");
+  btn_check_programmer = new QPushButton("Refresh list");
 
   no_id_error = new QCheckBox("Ignore ID Error");
   skip_id = new QCheckBox("Skip ID Check");
@@ -129,6 +148,18 @@ void MainWindow::initializer() {
   device_writebuffer = new QLineEdit();
   device_writebuffer->setReadOnly(true);
 
+  system_sett_path_label = new QLabel("minipro Path");
+  system_sett_path = new QLineEdit();
+  system_sett_path->setReadOnly(false);
+  QString path_val = get_preferences("minipro_path");
+  if(path_val != "null")
+    system_sett_path->setText(path_val);
+  else
+    system_sett_path->setText("Enter minipro path...");
+  output_path_label = new QLabel("Set output file");
+  output_path = new QLineEdit();
+  output_path->setReadOnly(false);
+
   hexTableView = new QTableView(window);
   status_view = new QPlainTextEdit(window);
 
@@ -137,8 +168,11 @@ void MainWindow::initializer() {
   status_view->setFont(monospace_font);
 }
 
-void MainWindow::run_async_process(QStringList &process_arguments,
-                                   const QString &type = "stderr") {
+void MainWindow::run_async_process(QStringList &process_arguments, const QString &type = "stderr") {
+  QString minipro_path = system_sett_path->text().trimmed();
+  if (minipro_path.isEmpty() || minipro_path.contains("Enter minipro path")) {
+      minipro_path = "minipro";
+  }
   QString process_arguments_string = "";
   async_process = new QProcess();
   for (auto const &each : process_arguments) {
@@ -162,7 +196,7 @@ void MainWindow::run_async_process(QStringList &process_arguments,
 
   status_view->appendPlainText("[Output]: ");
   status_view->ensureCursorVisible();
-  async_process->start("minipro", process_arguments);
+  async_process->start(minipro_path, process_arguments);
 }
 
 void MainWindow::async_process_err_output() const {
@@ -188,10 +222,13 @@ QStringList MainWindow::parse_checkboxes() const {
   return arguments;
 }
 
-QString MainWindow::run_process(QPlainTextEdit &target_plain_text_edit,
-                                const QStringList &process_arguments,
-                                const QString &type = "stderr") {
+QString MainWindow::run_process(QPlainTextEdit &target_plain_text_edit, const QStringList &process_arguments, const QString &type = "stderr") {
   QString output = "";
+  
+  QString minipro_path = system_sett_path->text().trimmed();
+  if (minipro_path.isEmpty() || minipro_path.contains("Enter minipro path")) {
+      minipro_path = "minipro";
+  }
 
   QString process_arguments_string = "";
   auto *process = new QProcess();
@@ -199,7 +236,7 @@ QString MainWindow::run_process(QPlainTextEdit &target_plain_text_edit,
     process_arguments_string += each + " ";
   }
   target_plain_text_edit.appendPlainText("[Input]: minipro " + process_arguments_string);
-  process->start("minipro", process_arguments);
+  process->start(minipro_path, process_arguments);
 
   if (!process->waitForStarted()) {
     output += "Start Error";
@@ -226,10 +263,20 @@ QString MainWindow::run_process(QPlainTextEdit &target_plain_text_edit,
 }
 
 void MainWindow::check_for_minipro() {
+
+  QString minipro_path = system_sett_path->text().trimmed();
+  if (minipro_path.isEmpty() || minipro_path.contains("Enter minipro path")) {
+      minipro_path = "null";
+  }
+
+  QApplication::setOverrideCursor(Qt::WaitCursor);
   QStringList arguments;
   arguments << "--version";
+  
   auto initial_check_error = run_process(*status_view, arguments);
+  
   if (initial_check_error.length() > 0 && initial_check_error.contains("minipro version")) {
+    QApplication::restoreOverrideCursor();
     static QRegularExpression re("minipro version.*\\n");
     QRegularExpressionMatch match = re.match(initial_check_error);
     if (match.hasMatch()) {
@@ -237,9 +284,50 @@ void MainWindow::check_for_minipro() {
       minipro_found = true;
       check_for_programmer();
       get_devices();
+      set_preferences("minipro_path", minipro_path);
     } else {
       combobox_programmer->setDisabled(true);
     }
+  } else {
+    QApplication::restoreOverrideCursor();
+    // Se fallisce, resetta lo stato
+    QMessageBox msgBox;
+    msgBox.setText("minipro CLI not found or Invalid Path");
+    msgBox.exec();
+    minipro_found = false;
+    programmer_found = false;
+    disable_buttons();
+    window->setWindowTitle("minipro CLI not found or Invalid Path");
+  }
+}
+
+void MainWindow::select_output_path_dialog(){
+  QFileDialog dialog(this);
+  dialog.setFileMode(QFileDialog::AnyFile);
+  dialog.setNameFilter(tr("Binary (*.bin)"));
+  dialog.setOption(QFileDialog::DontResolveSymlinks);
+  dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+  dialog.setDirectory(QDir::homePath());
+  if (dialog.exec()){
+    save_file_name = dialog.selectedFiles().first();
+    output_path->setText(save_file_name);
+  }
+}
+
+void MainWindow::select_path_dialog(){
+  QFileDialog dialog(this);
+  dialog.setFileMode(QFileDialog::ExistingFile);
+  dialog.setOption(QFileDialog::DontResolveSymlinks);
+  dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+  dialog.setDirectory(QDir::rootPath());
+  dialog.exec();
+  QStringList files = dialog.selectedFiles();
+  if (!files.isEmpty()) {
+    system_sett_path->setText(files.first());
+  }else{
+    QMessageBox msgBox;
+    msgBox.setText("minipro not selected");
+    msgBox.exec();
   }
 }
 
@@ -247,7 +335,7 @@ void MainWindow::check_for_programmer() {
   if (minipro_found) {
     QStringList arguments;
     arguments << "--presence_check";
-
+    combobox_programmer->clear();
     static QRegularExpression re("(?<=: ).*$");
     QRegularExpressionMatch match = re.match(run_process(*status_view, arguments).trimmed());
     if (match.hasMatch()) {
@@ -262,6 +350,18 @@ void MainWindow::check_for_programmer() {
     }
   }
 }
+
+void MainWindow::set_preferences(const QString &preference_key, QString &preference_value){
+  QSettings settings("minipro", "minipro-gui");
+  settings.setValue(preference_key, preference_value);
+}
+
+QString MainWindow::get_preferences(const QString &preference_key){
+  QSettings settings("minipro", "minipro-gui");
+  QString val = settings.value(preference_key, QString("null")).toString();
+  return val;
+}
+
 
 void MainWindow::disable_buttons() {
   combobox_device->setDisabled(true);
@@ -329,6 +429,7 @@ void MainWindow::select_device(const QString &selected_device) {
   }
 }
 
+
 void MainWindow::run_command() {
   if (minipro_found) {
     QStringList arguments;
@@ -339,9 +440,12 @@ void MainWindow::run_command() {
 }
 
 void MainWindow::read_device() {
-  QStringList arguments;
-  arguments << "-p" << device << "-r" << temp_file_name;
-  run_async_process(arguments);
+  save_file_name = output_path->text();
+  if(!save_file_name.isEmpty()){
+    QStringList arguments;
+    arguments << "-p" << device << "-r" << save_file_name;
+    run_async_process(arguments);
+  }
 }
 
 void MainWindow::read_device_output(int code, QProcess::ExitStatus) {
@@ -378,13 +482,14 @@ void MainWindow::build_default_hex_output() {
 
 void MainWindow::build_formatted_hex_output() {
   try {
-    QFile temp_file(temp_file_name);
-    temp_file.open(QFile::ReadOnly);
-    QString temp_file_content = QString::fromUtf8(temp_file.readAll().toHex());
-    temp_file.close();
+    QFile temp_file(save_file_name);
+    if(temp_file.open(QFile::ReadOnly)){
+      QString temp_file_content = QString::fromUtf8(temp_file.readAll().toHex());
+      temp_file.close();
 
-    hexViewModel.buildHexTable(temp_file_content);
-    format_hex_table_columns();
+      hexViewModel.buildHexTable(temp_file_content);
+      format_hex_table_columns();
+    }
   }
   catch (const std::exception &e) {
     status_view->appendPlainText("\n[Error]: " + static_cast<QString>(e.what()));
